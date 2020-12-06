@@ -20,7 +20,7 @@ dnl Make sure that the comment is aligned:
 dnl [  --enable-nsq           Enable nsq support])
 
 if test "$PHP_NSQ" != "no"; then
-  SEARCH_FOR="/include/event2/event.h"
+  SEARCH_FOR="/include/event.h"
   if test "$PHP_LIBEVENT_PATH" != "no"; then
     AC_MSG_CHECKING([for libevent headers in $PHP_LIBEVENT_PATH])
     if test -r $PHP_LIBEVENT_PATH/$SEARCH_FOR; then
@@ -46,7 +46,7 @@ echo "libevent-path:$LIBEVENT_DIR";
 
   PHP_ADD_INCLUDE($LIBEVENT_DIR/include)
 
-  LIBNAME=event
+  LIBNAME=ev
   LIBSYMBOL=event_base_new
 
   if test "x$PHP_LIBDIR" = "x"; then
