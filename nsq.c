@@ -25,9 +25,7 @@
 #include "ext/standard/info.h"
 #include "ext/json/php_json.h"
 #include "php_nsq.h"
-#include <event2/bufferevent.h>
-#include <event2/buffer.h>
-#include <event2/listener.h>
+#include <event.h>
 #include <signal.h>
 #include <sys/wait.h>
 
@@ -35,7 +33,6 @@
 #include "sub.h"
 #include "pub.h"
 #include "message.h"
-#include "nsq_lookupd.h"
 #include "nsq_exception.h"
 //#include <sys/prctl.h>
 

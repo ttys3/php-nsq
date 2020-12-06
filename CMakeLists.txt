@@ -6,8 +6,6 @@ set(SOURCE_FILES
         nsq.c
         nsq_exception.h
         nsq_exception.c
-        nsq_lookupd.c
-        nsq_lookupd.h
         command.c
         command.h
         common.c
