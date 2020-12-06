@@ -30,7 +30,6 @@
 #include <sys/wait.h>
 
 #include "ext/standard/php_string.h"
-#include "sub.h"
 #include "pub.h"
 #include "message.h"
 #include "nsq_exception.h"
@@ -250,40 +249,6 @@ PHP_METHOD (Nsq, deferredPublish)
 HashTable *child_fd;
 int is_init = 0;
 pid_t master = 0;
-ArgPidArr *arg_arr;
-int nsqd_num ;
-
-void start_worker_process(NSQArg arg, int index)
-{
-
-    zval zval_pid;
-    zval zval_arg;
-    pid_t pid;
-    pid = fork();
-
-    if (pid == 0) {
-        subscribe(&arg);
-    }else if(pid > 0 ){
-        if(!is_init) {
-            master = getpid();
-            signal(SIGCHLD, signal_handle);
-            signal(SIGTERM, signal_handle);
-
-            // init hash table
-            ALLOC_HASHTABLE(child_fd);
-            zend_hash_init(child_fd, 0, NULL, ZVAL_PTR_DTOR, 1);
-            is_init = 1;
-        
-        }
-
-        arg_arr[index].pid = pid;
-        arg_arr[index].arg = arg;
-
-        ZVAL_LONG(&zval_pid, pid);
-        zval *fd_res = zend_hash_next_index_insert(child_fd, &zval_pid);
-    }
-}
-
 
 static void signal_handle(int sig)
 {
@@ -330,184 +295,6 @@ static void signal_handle(int sig)
     default:
         break;
     }
-}
-
-
-PHP_METHOD (Nsq, subscribe)
-{
-    zend_fcall_info fci;
-    zend_fcall_info_cache fcc;
-    zval *config;
-    zval *class_lookupd;
-    zval *lookupd_addr, rv3, lookupd_re;
-
-    ZEND_PARSE_PARAMETERS_START(3, 3)
-        Z_PARAM_OBJECT(class_lookupd)
-        Z_PARAM_ARRAY(config)
-        Z_PARAM_FUNC(fci, fcc)
-    ZEND_PARSE_PARAMETERS_END();
-
-
-    lookupd_addr = zend_read_property(Z_OBJCE_P(class_lookupd), class_lookupd, "address", sizeof("address") - 1, 1,
-                                      &rv3);
-
-    zval *topic = zend_hash_str_find(Z_ARRVAL_P(config), "topic", sizeof("topic") - 1);
-    if (!topic) {
-        throw_exception(PHP_NSQ_ERROR_TOPIC_KEY_REQUIRED);
-        return;
-    }
-
-    zval *channel = zend_hash_str_find(Z_ARRVAL_P(config), "channel", sizeof("channel") - 1);
-    if (!channel) {
-        throw_exception(PHP_NSQ_ERROR_CHANNEL_KEY_REQUIRED);
-    }
-
-    zval *rdy = zend_hash_str_find(Z_ARRVAL_P(config), "rdy", sizeof("rdy") - 1);
-    zval *delay_time = zend_hash_str_find(Z_ARRVAL_P(config), "retry_delay_time", sizeof("retry_delay_time") - 1);
-    zval *connect_num = zend_hash_str_find(Z_ARRVAL_P(config), "connect_num", sizeof("connect_num") - 1);
-    if (!connect_num) {
-        connect_num = emalloc(sizeof(zval));
-        ZVAL_LONG(connect_num, 1);
-    }
-
-    zval *auto_finish = zend_hash_str_find(Z_ARRVAL_P(config), "auto_finish", sizeof("auto_finish") - 1);
-    if (auto_finish && Z_TYPE_P(auto_finish) == IS_FALSE) {
-
-        ZVAL_FALSE(auto_finish);
-
-    } else if (auto_finish && Z_TYPE_P(auto_finish) == IS_TRUE) {
-
-        ZVAL_TRUE(auto_finish);
-
-    } else {
-
-        auto_finish = emalloc(sizeof(zval));
-        ZVAL_TRUE(auto_finish);
-    }
-
-    char *lookupd_re_str; 
-    zval * producers;
-    zval *message;
-    int producers_count;
-
-lookup:
-    lookupd_re_str = lookup(Z_STRVAL_P(lookupd_addr), Z_STRVAL_P(topic));
-
-    if (*lookupd_re_str == '\0') {
-        throw_exception(PHP_NSQ_ERROR_LOOKUPD_SERVER_NOT_AVAILABLE);
-        return;
-    };
-
-    php_json_decode(&lookupd_re, lookupd_re_str, strlen(lookupd_re_str), 1, PHP_JSON_PARSER_DEFAULT_DEPTH);
-    producers = zend_hash_str_find(Z_ARRVAL(lookupd_re), "producers", sizeof("producers") - 1);
-    if (!producers) {
-        message = zend_hash_str_find(Z_ARRVAL(lookupd_re), "message", sizeof("message") - 1);
-        throw_exception(PHP_NSQ_ERROR_TOPIC_NOT_EXISTS);
-//        php_printf("%s\n", Z_STRVAL_P(message));
-        return;
-
-    }
-
-    producers_count = zend_array_count(Z_ARRVAL_P(producers));
-    nsqd_num = producers_count;
-
-    if(producers_count < 1){
-        //TODO: this maybe exception?
-        php_printf("The topic '%s' has not produced on any nsqd in the cluster but are present in the lookup data. The program will be retried after 10 seconds \n",Z_STRVAL_P(topic));
-        sleep(10);
-        goto lookup;
-    
-    }
-
-    arg_arr = (struct ArgPidArr*) emalloc(sizeof(ArgPidArr) * producers_count);
-    memset(arg_arr, 0, producers_count * sizeof(ArgPidArr));
-
-    // foreach producers  to get nsqd address
-    zval *val;
-    pid_t pid;
-    int i, j;
-    j = 0;
-
-    
-    for (i = 0; i < Z_LVAL_P(connect_num); i++) {
-
-        ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(producers), val) {
-
-            zval *nsqd_host = zend_hash_str_find(Z_ARRVAL_P(val), "broadcast_address", sizeof("broadcast_address") - 1);
-            zval *nsqd_port = zend_hash_str_find(Z_ARRVAL_P(val), "tcp_port", sizeof("tcp_port") - 1);
-            struct NSQMsg *msg;
-            msg = (struct  NSQMsg*) emalloc(sizeof(NSQMsg));
-            memset(msg, 0,  sizeof(NSQMsg));
-            msg->topic = Z_STRVAL_P(topic);
-            msg->channel = Z_STRVAL_P(channel);
-
-            if (rdy) {
-                msg->rdy = Z_LVAL_P(rdy);
-            } else {
-                msg->rdy = 1;
-            }
-
-            if (delay_time) {
-                msg->delay_time = Z_LVAL_P(delay_time);
-            } else {
-                msg->delay_time = 0;
-            }
-
-            if (auto_finish && Z_TYPE_P(auto_finish) == IS_TRUE) {
-                msg->auto_finish = 1;
-            } else {
-                msg->auto_finish = 0;
-            }
-
-            convert_to_string(nsqd_port);
-
-            NSQArg arg;
-            arg.msg = msg;
-            
-            arg.host = Z_STRVAL_P(nsqd_host);
-            arg.port = Z_STRVAL_P(nsqd_port);
-            arg.fci = &fci;
-            arg.fcc = &fcc;
-            arg.nsq_obj = getThis();
-
-            start_worker_process(arg, j);
-
-            j++;
-
-        }ZEND_HASH_FOREACH_END();
-
-    }
-    int ret_pid = 0;
-    while (1) {
-        ret_pid = wait(NULL);
-        if (ret_pid == -1) {
-            if (errno == EINTR) {
-                continue;
-            }
-            break;
-        }
-        printf("child process pids %d be terminated, trying reload \n", ret_pid);
-        int i ,j ;
-        int k = 0;
-        printf("last all pid:\n");
-        for(i = 0; i < Z_LVAL_P(connect_num); i++){
-            for(j = 0; j < nsqd_num; j++){
-                printf("    %d\n", arg_arr[k].pid);
-                if(arg_arr[k].pid == ret_pid){
-                    struct NSQArg arg = arg_arr[k].arg;
-                    start_worker_process(arg, k);
-                }
-                k++;
-            }
-       }
-
-
-    }
-
-    zval_dtor(auto_finish);
-    zval_dtor(connect_num);
-    zval_dtor(config);
-    zval_dtor(&lookupd_re);
 }
 
 
@@ -579,7 +366,6 @@ const zend_function_entry nsq_functions[] = {
     PHP_ME(Nsq, closeNsqdConnection, arginfo_close_nsqd_connection, ZEND_ACC_PUBLIC)
     PHP_ME(Nsq, publish, arginfo_nsq_publish, ZEND_ACC_PUBLIC)
     PHP_ME(Nsq, deferredPublish, arginfo_nsq_d_publish, ZEND_ACC_PUBLIC)
-    PHP_ME(Nsq, subscribe, arginfo_nsq_subscribe, ZEND_ACC_PUBLIC)
     PHP_FE_END    /* Must be the last line in nsq_functions[] */
 };
 /* }}} */
@@ -597,7 +383,6 @@ PHP_MINIT_FUNCTION (nsq)
     zend_declare_property_null(nsq_ce, ZEND_STRL("nsqd_connection_fds"), ZEND_ACC_PUBLIC TSRMLS_CC);
     zend_declare_property_null(nsq_ce, ZEND_STRL("conn_timeout"), ZEND_ACC_PUBLIC TSRMLS_CC);
     le_bufferevent = zend_register_list_destructors_ex(_php_bufferevent_dtor, NULL, "buffer event", module_number);
-    lookupd_init();
     nsq_message_init();
     nsq_exception_init();
 

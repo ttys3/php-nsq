@@ -39,12 +39,8 @@
             <file role='src' name='nsq.c'/>
             <file role='src' name='pub.c'/>
             <file role='src' name='pub.h'/>
-            <file role='src' name='sub.c'/>
-            <file role='src' name='sub.h'/>
             <file role='src' name='nsq_exception.c'/>
             <file role='src' name='nsq_exception.h'/>
-            <file role='src' name='nsq_lookupd.c'/>
-            <file role='src' name='nsq_lookupd.h'/>
             <file role='src' name='common.h'/>
             <file role='src' name='common.c'/>
             <file role='src' name='command.c'/>
@@ -54,9 +50,7 @@
             <dir name="examples">
                 <file role='doc' name='identify_pub.php'/>
                 <file role='doc' name='deferred_pub.php'/>
-                <file role='doc' name='identify_sub.php'/>
                 <file role='doc' name='pub.php'/>
-                <file role='doc' name='sub.php'/>
             </dir>
             <dir name="tests">
                 <file name="001.phpt" role="test" />

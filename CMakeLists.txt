@@ -10,8 +10,6 @@ set(SOURCE_FILES
         command.h
         common.c
         command.h
-        sub.c
-        sub.h
         pub.c
         pub.h
         message.h
